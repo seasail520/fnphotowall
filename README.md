@@ -199,6 +199,38 @@ fnpack build --directory fnphotowall
 
 为获得更佳的滚动与缩略图生成性能，建议系统至少安装 `ffmpeg` 或 `python3-pil` 之一。
 
+### 在飞牛 OS 上安装
+
+两者均为可选依赖，通过系统包管理器安装即可（由 apt 管理，系统升级不会破坏依赖关系）。
+
+```bash
+# 1. 在桌面「设置 → SSH」中启用 SSH，然后以管理员账号登录
+ssh <管理员账号>@<NAS 地址>
+
+# 2. 更新软件源并安装（ffmpeg 包已包含 ffprobe）
+sudo apt update
+sudo apt install -y ffmpeg python3-pil
+
+# 3. 验证安装结果
+ffmpeg -version | head -1
+python3 -c "import PIL; print('Pillow', PIL.__version__)"
+```
+
+安装完成后，在应用中心重启「瀑布相册」，然后访问 `/api/health` 确认依赖已生效：
+
+```bash
+curl http://<NAS 地址>:5666/app/fnphotowall/api/health
+# 期望看到 "pil": true，"ffmpeg" 为非空路径
+```
+
+若系统的软件源中不含 `python3-pil`，可改用 pip 安装（Debian 12 及以上需附加 `--break-system-packages`）：
+
+```bash
+sudo pip3 install --break-system-packages pillow
+```
+
+> 两个依赖均未安装时应用仍可正常运行，此时缩略图直接取原图输出，首屏数据量与滚动开销明显增加。
+
 ## 缩略图缓存调优
 
 默认配置已满足 10 GB 上限与 20 屏保底。如需调整，可通过以下三种方式之一：
