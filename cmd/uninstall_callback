@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# 卸载后：结束残留进程。用户数据（缩略图缓存、收藏记录）默认保留在 TRIM_PKGVAR，
+# 由飞牛在卸载时按系统策略清理。
+
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+if [ -r "${PID_FILE}" ]; then
+    pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        kill -TERM "${pid}" 2>/dev/null
+        sleep 1
+        kill -KILL "${pid}" 2>/dev/null
+    fi
+    rm -f "${PID_FILE}"
+fi
+
+rm -f "${TRIM_APPDEST}/app.sock" 2>/dev/null
+
+exit 0

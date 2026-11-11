@@ -1,0 +1,143 @@
+#!/bin/bash
+#
+# 瀑布相册 (fnphotowall) 运行控制脚本
+#   start  : 启动 Python 后端服务（监听统一网关要求的 Unix Socket）
+#   stop   : 停止服务
+#   status : 0 运行中 / 3 未运行
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+SOCK_FILE="${TRIM_APPDEST}/app.sock"
+SERVER="${TRIM_APPDEST}/server/photowall.py"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+check_process() {
+    local pid=$1
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+find_python() {
+    for p in python3 /usr/bin/python3 /usr/local/bin/python3 python; do
+        if command -v "$p" >/dev/null 2>&1; then
+            command -v "$p"
+            return 0
+        fi
+    done
+    return 1
+}
+
+status() {
+    if [ -f "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if check_process "${pid}"; then
+            return 0
+        fi
+        rm -f "${PID_FILE}"
+    fi
+    # 兜底：按脚本路径判断
+    if pgrep -f "photowall.py" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+start_process() {
+    if status; then
+        log_msg "already running"
+        return 0
+    fi
+
+    mkdir -p "${TRIM_PKGVAR}"
+    PY=$(find_python)
+    if [ -z "${PY}" ]; then
+        echo "未找到 python3，请先在系统设置中安装 Python 3.8 或更高版本。" > "${TRIM_TEMP_LOGFILE}"
+        log_msg "python3 not found"
+        return 1
+    fi
+
+    if [ ! -f "${SERVER}" ]; then
+        echo "应用文件缺失：${SERVER}" > "${TRIM_TEMP_LOGFILE}"
+        log_msg "server file missing: ${SERVER}"
+        return 1
+    fi
+
+    rm -f "${SOCK_FILE}"
+
+    ARGS="\"${SERVER}\" --socket \"${SOCK_FILE}\" --static \"${TRIM_APPDEST}/ui\" --data \"${TRIM_PKGVAR}\" --etc \"${TRIM_PKGETC}\" --log \"${LOG_FILE}\" --appname \"${TRIM_APPNAME}\""
+
+    if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ] && command -v runuser >/dev/null 2>&1; then
+        CMD="runuser -u ${TRIM_USERNAME} -- ${PY} ${ARGS}"
+    else
+        CMD="${PY} ${ARGS}"
+    fi
+
+    log_msg "Starting: ${CMD}"
+    bash -c "${CMD}" >> "${LOG_FILE}" 2>&1 &
+    printf "%s" "$!" > "${PID_FILE}"
+
+    # 等待 socket 出现，最多 10 秒
+    local count=0
+    while [ ! -S "${SOCK_FILE}" ] && [ $count -lt 20 ]; do
+        sleep 0.5
+        count=$((count + 1))
+    done
+
+    if [ ! -S "${SOCK_FILE}" ]; then
+        echo "相册服务启动失败，请查看日志：${LOG_FILE}" > "${TRIM_TEMP_LOGFILE}"
+        log_msg "socket not created, start failed"
+        return 1
+    fi
+
+    log_msg "started, socket ready"
+    return 0
+}
+
+stop_process() {
+    log_msg "Stopping process ..."
+
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if check_process "${pid}"; then
+            kill -TERM "${pid}" >> "${LOG_FILE}" 2>&1
+            local count=0
+            while check_process "${pid}" && [ $count -lt 10 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            if check_process "${pid}"; then
+                kill -KILL "${pid}"
+            fi
+        fi
+        rm -f "${PID_FILE}"
+    fi
+
+    rm -f "${SOCK_FILE}"
+    return 0
+}
+
+case $1 in
+start)
+    start_process || exit 1
+    exit 0
+    ;;
+stop)
+    stop_process
+    exit 0
+    ;;
+status)
+    if status; then
+        exit 0
+    else
+        exit 3
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

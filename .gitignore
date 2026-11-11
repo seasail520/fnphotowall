@@ -1,0 +1,24 @@
+# 构建产物（通过 GitHub Releases 分发，不入库）
+*.fpk
+app.tgz
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# 本地调试产生的数据目录（README「本地调试」一节的 --data / --fav）
+_devdata*/
+_devfav*/
+_sample*/
+_samples/
+*.log
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

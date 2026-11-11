@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# 安装前检查：确认系统存在可用的 Python 3 运行时。
+# 后端为零依赖 Python 实现，不需要 pip 安装任何第三方包。
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+mkdir -p "${TRIM_PKGVAR}" 2>/dev/null
+
+PY=""
+for p in python3 /usr/bin/python3 /usr/local/bin/python3 python; do
+    if command -v "$p" >/dev/null 2>&1; then
+        PY=$(command -v "$p")
+        break
+    fi
+done
+
+if [ -z "${PY}" ]; then
+    echo "未找到 python3。请在「系统设置 - 应用设置」中安装 Python 3（3.8 及以上）后重试。" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+if ! "${PY}" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null; then
+    echo "Python 版本过低（需要 3.8 及以上）：$("${PY}" -V 2>&1)" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - install_init: python=$PY $("${PY}" -V 2>&1)" >> "${LOG_FILE}"
+
+# ffmpeg / ffprobe 用于生成视频封面，缺失时降级为纯色占位图，不阻塞安装
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - install_init: ffmpeg not found, video posters will fall back" >> "${LOG_FILE}"
+fi
+
+exit 0

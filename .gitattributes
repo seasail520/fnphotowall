@@ -1,0 +1,19 @@
+# 统一用 LF：这些脚本最终要跑在飞牛（Linux）上，
+# 若在 Windows 检出成 CRLF 再打包，会出现 "bad interpreter" 之类的错误。
+* text=auto eol=lf
+
+# 生命周期脚本与后端代码显式指定 LF
+cmd/* text eol=lf
+app/server/*.py text eol=lf
+app/ui/*.html text eol=lf
+app/ui/assets/* text eol=lf
+manifest text eol=lf
+config/* text eol=lf
+
+# 二进制文件，禁止行尾转换
+*.png binary
+*.PNG binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.fpk binary

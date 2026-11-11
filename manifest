@@ -1,0 +1,14 @@
+appname               = fnphotowall
+version               = 1.3.11
+display_name          = 瀑布相册
+desc                  = 飞牛 NAS 瀑布流相册。以瀑布流随机浏览照片与视频，支持大图查看、收藏、删除与拍摄参数详情，并提供资源管理器风格的文件夹导航。
+platform              = all
+source                = thirdparty
+maintainer            = Seasail
+maintainer_url        = https://github.com/seasail520
+os_min_version        = 1.0.0
+desktop_uidir         = ui
+desktop_applaunchname = fnphotowall.Application
+ctl_stop              = true
+checkport             = false
+changelog             = v1.3.11：启动提速——索引扫描完落盘为快照，重启直接读取（2 万张从全盘重扫 10.9s 降到 0.3s 进相册），此后在后台静默校正；「是否已缓存」标记一并存入快照，省掉每次请求约 500ms 的哈希计算；后台重扫按缩略图队列积压主动让路，「换一批」也不再触发同步扫描。

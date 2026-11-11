@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#08090c">
+<title>超清查看</title>
+<base href="{{BASE}}">
+<style>
+  :root {
+    --mint: #5fe3c4;
+    --ease: cubic-bezier(.22,.68,.28,1);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #08090c;
+    color: #e9edf4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  .stage {
+    position: fixed; inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    touch-action: none;
+    cursor: zoom-in;
+  }
+  .stage.dragging { cursor: grabbing; }
+  .stage img {
+    max-width: 100%;
+    max-height: 100%;
+    min-width: 0;
+    min-height: 0;      /* 关键：grid item 上不加这个，max-height:100% 不生效，竖图会以原始高度溢出被裁 */
+    object-fit: contain;
+    transform-origin: 50% 50%;
+    will-change: transform;
+    user-select: none;
+    -webkit-user-drag: none;
+    image-rendering: auto;
+  }
+  .bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 14px;
+    background: linear-gradient(180deg, rgba(8,9,12,.92), rgba(8,9,12,.55) 62%, transparent);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .bar > * { pointer-events: auto; }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 14px 0 9px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    font-size: 13.5px;
+    font-weight: 620;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    cursor: pointer;
+  }
+  .back:active { transform: scale(.97); }
+  .back svg { width: 17px; height: 17px; }
+  .info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 2px;
+  }
+  .info b {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .info span {
+    font-size: 11px;
+    color: rgba(255,255,255,.52);
+    font-variant-numeric: tabular-nums;
+  }
+  .zoom {
+    height: 38px;
+    min-width: 52px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    cursor: pointer;
+  }
+  .zoom.is-on { color: var(--mint); border-color: rgba(95,227,196,.5); background: rgba(95,227,196,.16); }
+  .hint {
+    position: fixed;
+    left: 50%; bottom: calc(18px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(20,23,30,.72);
+    border: 1px solid rgba(255,255,255,.08);
+    color: rgba(255,255,255,.6);
+    font-size: 11.5px;
+    white-space: nowrap;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: opacity .4s;
+    z-index: 5;
+  }
+  .hint.gone { opacity: 0; }
+  .err {
+    position: fixed; inset: 0;
+    display: none;
+    place-items: center;
+    text-align: center;
+    color: rgba(255,255,255,.6);
+    font-size: 13px;
+    padding: 24px;
+  }
+  .err.show { display: grid; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <img id="img" alt="">
+</div>
+
+<div class="bar">
+  <button class="back" id="back" aria-label="返回">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+    <span>返回</span>
+  </button>
+  <div class="info">
+    <b id="name">—</b>
+    <span id="meta"></span>
+  </div>
+  <button class="zoom" id="zoomBtn" title="按 100% 像素显示">1:1</button>
+</div>
+
+<div class="hint" id="hint">双击 / 滚轮 / 双指可缩放，拖动可平移</div>
+<div class="err" id="err">原图加载失败，可能文件已被移动或没有读取权限</div>
+
+<script>
+(function () {
+  var BASE = document.querySelector('base').getAttribute('href') || '/';
+  var params = new URLSearchParams(location.search);
+  var filePath = params.get('path') || '';
+  var img = document.getElementById('img');
+  var stage = document.getElementById('stage');
+  var nameEl = document.getElementById('name');
+  var metaEl = document.getElementById('meta');
+  var zoomBtn = document.getElementById('zoomBtn');
+
+  var zoom = { s: 1, x: 0, y: 0 };
+  var MAX = 16;
+
+  var base = filePath.split(/[\\/]+/).filter(Boolean);
+  var fileName = base.length ? base[base.length - 1] : '原图';
+  nameEl.textContent = fileName;
+  document.title = fileName + ' · 超清';
+  metaEl.textContent = '正在加载原图…';
+
+  function apply() {
+    img.style.transform = zoom.s === 1
+      ? ''
+      : 'translate3d(' + zoom.x + 'px,' + zoom.y + 'px,0) scale(' + zoom.s + ')';
+    var nat = img.naturalWidth, disp = img.offsetWidth || 1;
+    var ratio = nat ? nat / disp : 1;
+    stage.style.cursor = zoom.s > 1.01 ? 'grab' : 'zoom-in';
+    zoomBtn.classList.toggle('is-on', zoom.s >= ratio * 0.96 && ratio > 1.01);
+  }
+  function clampPan() {
+    var maxX = Math.max(0, (zoom.s - 1) * img.offsetWidth / 2);
+    var maxY = Math.max(0, (zoom.s - 1) * img.offsetHeight / 2);
+    zoom.x = Math.min(maxX, Math.max(-maxX, zoom.x));
+    zoom.y = Math.min(maxY, Math.max(-maxY, zoom.y));
+  }
+  function zoomAt(px, py, factor) {
+    var next = Math.min(MAX, Math.max(1, zoom.s * factor));
+    if (Math.abs(next - zoom.s) < 0.0005) return;
+    if (next <= 1.001) { zoom.s = 1; zoom.x = 0; zoom.y = 0; apply(); return; }
+    var r = img.getBoundingClientRect();
+    var bcx = r.left + r.width / 2 - zoom.x;
+    var bcy = r.top + r.height / 2 - zoom.y;
+    var dx = (px - bcx - zoom.x) / zoom.s;
+    var dy = (py - bcy - zoom.y) / zoom.s;
+    zoom.s = next;
+    zoom.x = px - bcx - dx * zoom.s;
+    zoom.y = py - bcy - dy * zoom.s;
+    clampPan();
+    apply();
+  }
+
+  /* 返回：优先关掉这个标签页，其次 history.back()，最后回主页 */
+  function goBack() {
+    try { window.close(); } catch (e) {}
+    setTimeout(function () {
+      if (history.length > 1) { history.back(); return; }
+      // 关不掉又没有历史（部分手机 WebView）：回首页并带上 restore，由主页面恢复到大图
+      location.replace(BASE + (filePath ? '?restore=' + encodeURIComponent(filePath) : ''));
+    }, 70);
+  }
+  document.getElementById('back').addEventListener('click', goBack);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') goBack();
+  });
+
+  img.addEventListener('load', function () {
+    metaEl.textContent = img.naturalWidth + ' × ' + img.naturalHeight +
+      '  ·  原图  ·  ' + Math.round(img.naturalWidth / (img.offsetWidth || 1) * 10) / 10 + '× 可放大';
+    apply();
+  });
+  img.addEventListener('error', function () {
+    document.getElementById('err').classList.add('show');
+    metaEl.textContent = '加载失败';
+  });
+
+  zoomBtn.addEventListener('click', function () {
+    var ratio = img.naturalWidth / (img.offsetWidth || 1);
+    if (zoom.s >= ratio * 0.96) { zoom.s = 1; zoom.x = 0; zoom.y = 0; }
+    else { zoom.s = Math.min(MAX, ratio); zoom.x = 0; zoom.y = 0; }
+    apply();
+  });
+
+  stage.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.0018)));
+  }, { passive: false });
+
+  stage.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    if (zoom.s > 1.05) { zoom.s = 1; zoom.x = 0; zoom.y = 0; apply(); }
+    else zoomAt(e.clientX, e.clientY, 2.6);
+  });
+
+  // 桌面端拖动：用 Pointer Events + setPointerCapture，鼠标快速移动/移出元素也能持续追踪，
+  // 和手机端 touch（隐式 capture）行为一致，避免“拖一下就断”。
+  var drag = null;
+  var dragPointerId = null;
+  function startDrag(x, y, pid) {
+    if (zoom.s <= 1.01) return false;
+    drag = { x: x, y: y, ox: zoom.x, oy: zoom.y };
+    dragPointerId = pid;
+    stage.classList.add('dragging');
+    return true;
+  }
+  function moveDrag(x, y) {
+    if (!drag) return;
+    zoom.x = drag.ox + (x - drag.x);
+    zoom.y = drag.oy + (y - drag.y);
+    clampPan(); apply();
+  }
+  function endDrag() {
+    if (!drag) return;
+    drag = null; dragPointerId = null;
+    stage.classList.remove('dragging');
+  }
+
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'mouse') return;      // 触屏走下面的 touch 分支
+    if (e.button !== 0) return;
+    if (!startDrag(e.clientX, e.clientY, e.pointerId)) return;
+    e.preventDefault();
+    try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  stage.addEventListener('pointermove', function (e) {
+    if (e.pointerType !== 'mouse') return;
+    if (drag && dragPointerId === e.pointerId) moveDrag(e.clientX, e.clientY);
+  });
+  stage.addEventListener('pointerup', function (e) {
+    if (drag && dragPointerId === e.pointerId) endDrag();
+  });
+  stage.addEventListener('pointercancel', function (e) {
+    if (drag && dragPointerId === e.pointerId) endDrag();
+  });
+
+  var pinch = null, panT = null;
+  var dist = function (a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); };
+  stage.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 2) { pinch = { d: dist(e.touches[0], e.touches[1]) }; panT = null; }
+    else if (e.touches.length === 1 && zoom.s > 1.01) {
+      panT = { x: e.touches[0].clientX, y: e.touches[0].clientY, ox: zoom.x, oy: zoom.y };
+    }
+  }, { passive: true });
+  stage.addEventListener('touchmove', function (e) {
+    if (pinch && e.touches.length === 2) {
+      var a = e.touches[0], b = e.touches[1];
+      var d = dist(a, b);
+      if (pinch.d > 0) zoomAt((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2, d / pinch.d);
+      pinch.d = d;
+      e.preventDefault();
+    } else if (panT && e.touches.length === 1) {
+      var t = e.touches[0];
+      zoom.x = panT.ox + (t.clientX - panT.x);
+      zoom.y = panT.oy + (t.clientY - panT.y);
+      clampPan(); apply();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  stage.addEventListener('touchend', function (e) {
+    if (e.touches.length < 2) pinch = null;
+    if (e.touches.length === 0) panT = null;
+  }, { passive: true });
+
+  // 加载原图
+  img.src = 'api/file?path=' + encodeURIComponent(filePath) + '&inline=1';
+
+  setTimeout(function () { document.getElementById('hint').classList.add('gone'); }, 3200);
+})();
+</script>
+</body>
+</html>

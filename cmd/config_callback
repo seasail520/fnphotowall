@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# 配置变更后（例如用户在应用设置中调整了授权目录）：重启服务以加载新的可访问路径。
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - config_callback: TRIM_DATA_ACCESSIBLE_PATHS=${TRIM_DATA_ACCESSIBLE_PATHS}" >> "${LOG_FILE}"
+
+BASEDIR=$(dirname "$0")
+"${BASEDIR}/main" stop  >> "${LOG_FILE}" 2>&1
+sleep 1
+"${BASEDIR}/main" start >> "${LOG_FILE}" 2>&1
+
+exit $?

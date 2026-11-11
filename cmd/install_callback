@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# 安装后：准备运行目录与收藏夹目录。
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+mkdir -p "${TRIM_PKGVAR}/thumbs" 2>/dev/null
+mkdir -p "${TRIM_PKGHOME}" 2>/dev/null
+
+# 收藏夹优先放在应用共享目录中，方便在「文件管理」里直接看到
+FAV_BASE=""
+if [ -n "${TRIM_DATA_SHARE_PATHS}" ]; then
+    IFS=':' read -ra _PATHS <<< "${TRIM_DATA_SHARE_PATHS}"
+    for p in "${_PATHS[@]}"; do
+        if [ -d "$p" ]; then
+            FAV_BASE="$p"
+            break
+        fi
+    done
+fi
+
+if [ -n "${FAV_BASE}" ]; then
+    mkdir -p "${FAV_BASE}/收藏" 2>/dev/null
+    chown -R "${TRIM_UID}:${TRIM_GID}" "${FAV_BASE}" 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - install_callback: favorites dir = ${FAV_BASE}/收藏" >> "${LOG_FILE}"
+else
+    mkdir -p "${TRIM_PKGVAR}/favorites" 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - install_callback: favorites dir = ${TRIM_PKGVAR}/favorites" >> "${LOG_FILE}"
+fi
+
+chown -R "${TRIM_UID}:${TRIM_GID}" "${TRIM_PKGVAR}" 2>/dev/null
+
+exit 0
