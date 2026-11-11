@@ -10,7 +10,7 @@
 ![后端](https://img.shields.io/badge/后端-Python%203%20标准库-5fe3c4)
 ![入口](https://img.shields.io/badge/入口-统一网关%20Unix%20Socket%2Fapp%2Ffnphotowall-orange)
 ![平台](https://img.shields.io/badge/平台-fnOS-5fe3c4)
-![版本](https://img.shields.io/badge/版本-v1.3.11-7e9bff)
+![版本](https://img.shields.io/badge/版本-v1.3.12-7e9bff)
 ![License](https://img.shields.io/badge/License-MIT-5fe3c4)
 
 ---
@@ -117,6 +117,7 @@
 
 | 版本 | 主要更新 |
 | --- | --- |
+| **v1.3.12** | **修复「换一批」失效**：排序权重由 `rnd ^ seed` 改为 splitmix64 混合。原写法中 seed 仅影响低 30 位，不同种子排出的顺序完全相同，因此点击后只有动画、照片不变，只有重启应用重建索引才会换一批 |
 | **v1.3.11** | **启动提速**：索引落盘为快照，重启直接读取不再全盘重扫（2 万张从 10.9 s → 0.3 s）；缓存优先标记一并存入快照，省去每次请求约 500 ms 的哈希计算；后台重扫主动让出 IO |
 | **v1.3.10** | 超清层顶栏简化：返回仅保留图标，右上角 `1:1` 改为**下载**图标，可直接保存原图 |
 | **v1.3.9** | 超清改为**应用内全屏层**，解决移动端（飞牛内置 WebView）点击原图后返回导致主页重载的问题，全程零页面导航 |

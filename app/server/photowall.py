@@ -107,6 +107,23 @@ INDEX_POLITE_EVERY = 40                    # 后台扫描时每遍历多少个�
 FFMPEG = shutil.which("ffmpeg")
 FFPROBE = shutil.which("ffprobe")
 
+_MASK64 = (1 << 64) - 1
+
+
+def mix_rank(rnd, seed):
+    """把 seed 充分混入 rnd，得到随 seed 完全变化的排序权重。
+
+    不能直接用 ``rnd ^ seed``：rnd 是 63 位随机数，而 seed 通常在 2^30 以内，
+    异或只会翻转低位，由高 33 位决定的先后关系原封不动——表现就是
+    「换一批」点下去照片和顺序都不变（除非重启应用让 rnd 全部重生成）。
+    这里用 splitmix64 做雪崩混合，seed 改动一位就足以让整份排序重排。
+    """
+    x = (rnd ^ ((seed * 0x9E3779B97F4A7C15) & _MASK64)) & _MASK64
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & _MASK64
+    return x ^ (x >> 31)
+
+
 try:  # Pillow 可选：存在时缩略图质量最好
     from PIL import Image, ImageOps  # type: ignore
     PIL_OK = True
@@ -1502,9 +1519,9 @@ class Library:
         # 缓存优先：已在缩略图缓存池里的排在前面，打开就能秒出
         if self.thumbs and items:
             self._refresh_cached_flags(ent, items)
-            out = sorted(items, key=lambda it: (0 if it.get("_c") else 1, it["rnd"] ^ seed))
+            out = sorted(items, key=lambda it: (0 if it.get("_c") else 1, mix_rank(it["rnd"], seed)))
         else:
-            out = sorted(items, key=lambda it: it["rnd"] ^ seed)
+            out = sorted(items, key=lambda it: mix_rank(it["rnd"], seed))
 
         if len(cache) > 4:
             cache.clear()
@@ -1553,7 +1570,7 @@ class Library:
             merged = lists[0]
         else:
             merged = list(heapq.merge(
-                *lists, key=lambda it: (0 if it.get("_c") else 1, it["rnd"] ^ seed)))
+                *lists, key=lambda it: (0 if it.get("_c") else 1, mix_rank(it["rnd"], seed))))
         total = len(merged)
         page = merged[offset:offset + limit] if limit else merged[offset:]
         # 本页缩略图插到队首（用户马上要），下一页排到队尾（提前量）
